@@ -1,0 +1,4 @@
+aws:
+  assume_role: full-admin
+  region: ap-southeast-2
+  profile: chris
