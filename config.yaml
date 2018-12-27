@@ -2,3 +2,6 @@ aws:
   assume_role: full-admin
   region: ap-southeast-2
   profile: chris
+s3:
+  bucket: chrisdlangton
+  base_path: "{{ HOSTNAME }}/{{ USER }}"

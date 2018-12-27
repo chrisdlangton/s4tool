@@ -1,8 +1,11 @@
 import boto3
-from os import path, getcwd
+import socket
+from os import path, getcwd, environ
 from yaml import load, dump
+from jinja2 import Environment, FileSystemLoader
 
 session = None
+config = None
 
 def make_arn(service, resource, partition='aws', use_account_id=True, account_id=None, region=None):
   if use_account_id and not account_id:
@@ -57,11 +60,24 @@ def assume_role(role, region=None, profile=None):
                        aws_session_token=credentials['SessionToken'],
                        region_name=region)
 
+def get_config():
+  global config
+  if not config:
+    env = Environment(loader = FileSystemLoader(path.realpath(getcwd())), trim_blocks=True, lstrip_blocks=True)
+    template = env.get_template('config.yaml')
+    config = load(template.render({
+      'USER': environ.get('USER'),
+      'HOME': environ.get('HOME'),
+      'HOSTNAME': socket.gethostname(),
+      'PWD': path.realpath(getcwd())
+    }))
+
+  return config
+
 def get_session():
   global session
-  config_path = path.realpath(path.join(getcwd(), 'config.yaml'))
-  with open(config_path, 'r') as f:
-    config = load(f)
+  
+  config = get_config()
 
   aws_region = config['aws'].get('region')
   aws_profile = config['aws'].get('profile')
