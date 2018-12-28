@@ -7,6 +7,37 @@ from os.path import expanduser
 
 def main(credentials_file, temp_profile, log_level=0, config_file=None):
   log = logging.getLogger()
+
+  config = get_config(config_file)
+  aws_region = config['aws'].get('region')
+  session = get_session(temp_profile, credentials_file)
+  profile = config['aws'].get('profile')
+  if not profile or config['aws'].get('assume_role'):
+    profile = temp_profile
+
+  # print check_output(['aws', '--profile', profile, 's3', 'ls'])
+  kms = session.client('kms')
+  alias = config['kms']['alias']
+  if alias.startswith('arn:aws'):
+    alias_arn = alias
+  else:
+    alias_arn = make_arn('kms', path.join('alias', alias), region=aws_region)
+  log.debug(alias_arn)
+  log.info('gathering a list of KMS aliases')
+  for k in kms.list_aliases()['Aliases']:
+    log.info('comparing %s' % k['AliasArn'])
+    if alias_arn == k['AliasArn']:
+      log.info('found %s' % alias_arn)
+
+  s3 = session.client('s3')
+  log.info('gathering a list of S3 buckets')
+  for b in s3.list_buckets()['Buckets']:
+    if b['Name'] == config['s3']['bucket']:
+      log.warn('bucket [%s] exists' % b['Name'])
+
+
+def setup_logging():
+  log = logging.getLogger()
   format_str = '%(asctime)s - %(levelname)-8s - %(message)s'
   date_format = '%Y-%m-%d %H:%M:%S'
   if os.isatty(2):
@@ -35,32 +66,6 @@ def main(credentials_file, temp_profile, log_level=0, config_file=None):
   if log_level >= 5:
     log.setLevel(logging.DEBUG)
 
-  config = get_config(config_file)
-  aws_region = config['aws'].get('region')
-  session = get_session(temp_profile, credentials_file)
-  profile = config['aws'].get('profile')
-  if not profile or config['aws'].get('assume_role'):
-    profile = temp_profile
-
-  # print check_output(['aws', '--profile', profile, 's3', 'ls'])
-  kms = session.client('kms')
-  alias = config['kms']['alias']
-  if alias.startswith('arn:aws'):
-    alias_arn = alias
-  else:
-    alias_arn = make_arn('kms', path.join('alias', alias), region=aws_region)
-  log.debug(alias_arn)
-  log.info('gathering a list of KMS aliases')
-  for k in kms.list_aliases()['Aliases']:
-    log.info('comparing %s' % k['AliasArn'])
-    if alias_arn == k['AliasArn']:
-      log.info('found %s' % alias_arn)
-
-  s3 = session.client('s3')
-  log.info('gathering a list of S3 buckets')
-  for b in s3.list_buckets()['Buckets']:
-    if b['Name'] == config['s3']['bucket']:
-      log.warn('bucket [%s] exists' % b['Name'])
 
 if __name__ == '__main__':
   CREDS_FILE='%s/.aws/credentials' % expanduser("~")

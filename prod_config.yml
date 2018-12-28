@@ -1,8 +1,8 @@
 aws:
   assume_role: full-admin
   region: ap-southeast-2
-  access_key_id: AKIAJTJ7ZET3BDMLVECA
-  secret_access_key: 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
+  access_key_id: ABCDEF123ABCDEF123
+  secret_access_key: abcdefabcdefabcdefabcdefabcdefabcdef
 kms:
   alias: s4tool
 s3:
