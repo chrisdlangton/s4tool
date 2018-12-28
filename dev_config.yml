@@ -1,6 +1,7 @@
 aws:
   assume_role: full-admin
   region: ap-southeast-2
+  profile: chris
 kms:
   alias: s4tool
 s3:
