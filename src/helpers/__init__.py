@@ -1,28 +1,10 @@
-import sys, os, logging, colorlog, boto3, socket, logging, configparser
+import sys, logging, boto3, socket, configparser
 from os import path, getcwd, environ
 from yaml import load, dump
 from jinja2 import Environment, FileSystemLoader
 
 
 log = logging.getLogger('s4tool')
-log.setLevel(logging.INFO)
-format_str = '%(asctime)s - %(levelname)-8s - %(message)s'
-date_format = '%Y-%m-%d %H:%M:%S'
-if os.isatty(2):
-  cformat = '%(log_color)s' + format_str
-  colors = {'DEBUG': 'reset',
-            'INFO': 'bold_blue',
-            'WARNING': 'bold_orange',
-            'ERROR': 'bold_red',
-            'CRITICAL': 'bold_red'}
-  formatter = colorlog.ColoredFormatter(cformat, date_format, log_colors=colors)
-else:
-  formatter = logging.Formatter(format_str, date_format)
-
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(formatter)
-log.addHandler(stream_handler)
-
 session = None
 config = None
 
@@ -43,7 +25,7 @@ def start_boto_session(credentials_file=None, temp_profile=None, access_key_id=N
   global session
   if (access_key_id and not secret_access_key) or \
      (secret_access_key and not access_key_id):
-    log.error('Set both secret_access_key and access_key_id together')
+    log.critical('Set both secret_access_key and access_key_id together')
     sys.exit(1)
 
   if not session:
@@ -52,7 +34,7 @@ def start_boto_session(credentials_file=None, temp_profile=None, access_key_id=N
                             aws_secret_access_key=secret_access_key)
     if not profile:
       if not credentials_file or not temp_profile:
-        log.error('when not using a profile ensure credentials_file and temp_profile are defined')
+        log.critical('when not using a profile ensure credentials_file and temp_profile are defined')
         sys.exit(1)
       update_config(credentials_file,
                     profile=temp_profile,
@@ -137,7 +119,7 @@ def get_config(config_file=None):
     env = Environment(loader = FileSystemLoader(config_path), trim_blocks=True, lstrip_blocks=True)
     log.info('Reading configuration file at %s' % path.join(config_path, config_file))
     template = env.get_template(config_file)
-    log.info('Jinja2 parsing %s' % config_file)
+    log.debug('Jinja2 parsing %s' % config_file)
     config = load(template.render({
       'USER': environ.get('USER'),
       'HOME': environ.get('HOME'),
@@ -154,8 +136,10 @@ def get_session(temp_profile, credentials_file):
 
   aws_region = config['aws'].get('region')
   aws_profile = config['aws'].get('profile')
+  access_key_id = config['aws'].get('access_key_id')
+  secret_access_key = config['aws'].get('secret_access_key')
 
-  start_boto_session(temp_profile=temp_profile, credentials_file=credentials_file, profile=aws_profile, region=aws_region)
+  start_boto_session(temp_profile=temp_profile, credentials_file=credentials_file, profile=aws_profile, access_key_id=access_key_id, secret_access_key=secret_access_key, region=aws_region)
   if 'assume_role' in config['aws']:
     assume_role(config['aws']['assume_role'], temp_profile=temp_profile, credentials_file=credentials_file, region=aws_region, profile=aws_profile)
 
