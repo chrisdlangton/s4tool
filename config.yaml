@@ -27,6 +27,15 @@ bucket_policy:
       Condition:
         StringNotEquals:
           s3:x-amz-server-side-encryption: aws:kms
+    - Sid: DenyPlaintextRequests
+      Effect: Deny
+      Principal:
+        AWS: "*"
+      Action: s3:*
+      Resource: arn:aws:s3:::chrisdlangton-backup/*
+      Condition:
+        Bool:
+          aws:SecureTransport: 'false'
 
 key_policy:
   Version: '2012-10-17'
