@@ -230,6 +230,7 @@ def get_config(config_file=None):
 
   return config
 
+
 def get_session(temp_profile, credentials_file):
   global session
   
@@ -246,3 +247,4 @@ def get_session(temp_profile, credentials_file):
     assume_role(config['aws']['assume_role'], temp_profile=temp_profile, credentials_file=credentials_file, region=aws_region, profile=aws_profile, duration=duration)
 
   return session
+

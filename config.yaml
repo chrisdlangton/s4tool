@@ -1,6 +1,6 @@
 ---
 # Prevents the creation of any AWS resources such as S3 buckets and KMS keys
-safe_mode: True
+safe_mode: False
 
 aws:
   assume_role: full-admin
@@ -17,6 +17,9 @@ s3:
 # Special settings used when safe_mode False at setup time
 setup:
   enable_key_rotation: True
+  key_origin: AWS_KMS
+  key_material: awscmk.key #dd if=/dev/urandom bs=32 count=1 of=awscmk.key
+
   bucket_policy:
     Version: '2012-10-17'
     Id: PutObjPolicy

@@ -1,6 +1,6 @@
-import sys, os, colorlog, logging, argparse, json
+import sys, os, colorlog, logging, argparse, json, rsa
 from helpers import make_arn, get_session, get_config, start_boto_session, get_aws_account_id, setup_logging
-from os import path
+from os import path, getcwd
 from subprocess import check_output
 from os.path import expanduser
 
@@ -8,6 +8,7 @@ from os.path import expanduser
 def main(credentials_file, temp_profile, log_level=2, config_file=None):
   setup_logging(log_level)
   log = logging.getLogger()
+  pwd = path.realpath(getcwd())
 
   config = get_config(config_file)
   aws_region = config['aws'].get('region')
@@ -54,20 +55,73 @@ def main(credentials_file, temp_profile, log_level=2, config_file=None):
         sys.exit(1)
       else:
         log.warn('kms_key_id [%s] could not be found, creating resources' % kms_key_arn)
-        if 'setup' in config and config['setup'].get('key_policy'):
-          key = kms.create_key(
-            Policy=json.dumps(config['setup']['key_policy']),
-            Description="s4tool",
-            KeyUsage='ENCRYPT_DECRYPT')
+        if 'setup' in config:
+          key_origin = config['setup'].get('key_origin')
+          key_store_id = config['setup'].get('key_store_id')
+          if key_origin == 'AWS_CLOUDHSM' and not key_store_id:
+            log.critical('key_store_id is requried when using AWS_CLOUDHSM origin')
+            sys.exit(1)
+          if config['setup'].get('key_policy'):
+            params = {
+              'Policy': json.dumps(config['setup']['key_policy']),
+              'Origin': key_origin,
+              'Description': "s4tool",
+              'KeyUsage': 'ENCRYPT_DECRYPT'
+            }
+            if key_store_id:
+              params['CustomKeyStoreId'] = key_store_id
+            key = kms.create_key(**params)
         else:
           key = kms.create_key(
             BypassPolicyLockoutSafetyCheck=True,
+            Origin=key_origin,
             Description="s4tool",
             KeyUsage='ENCRYPT_DECRYPT')
-
         key_id = key['KeyMetadata']['KeyId']
         kms_key_arn = key['KeyMetadata']['Arn']
         log.info('Created key with id [%s]' % key_id)
+        if key_origin == 'EXTERNAL':
+          key_material = config['setup'].get('key_material')
+          if not key_material:
+            log.critical('key_material is requried when using EXTERNAL origin')
+            sys.exit(1)
+          log.info('Retrieving ImportToken and PublicKey')
+          parameters_for_import = kms.get_parameters_for_import(
+              KeyId=key_id,
+              WrappingAlgorithm='RSAES_OAEP_SHA_1',
+              WrappingKeySpec='RSA_2048',
+          )
+          with open(path.join(pwd, 'PublicKey.b64'), 'w') as f:
+            f.write(parameters_for_import['PublicKey'])
+          check_output(['openssl',
+                        'enc', '-d', '-base64', '-A',
+                        '-in', path.join(pwd, 'PublicKey.b64'),
+                        '-out', path.join(pwd, 'PublicKey.bin')])
+          with open(path.join(pwd, 'ImportToken.b64'), 'w') as f:
+            f.write(parameters_for_import['ImportToken'])
+          check_output(['openssl',
+                        'enc', '-d', '-base64', '-A',
+                        '-in', path.join(pwd, 'ImportToken.b64'),
+                        '-out', path.join(pwd, 'ImportToken.bin')])
+
+          log.info('Retrieve key material [%s]' % key_material)
+          with open(key_material) as f:
+            log.info('Creating crypto envelope')
+            check_output(['openssl',
+                          'rsautl', '-encrypt', '-oaep', '-pubin', '-keyform', 'DER',
+                          '-in', path.join(pwd, key_material),
+                          '-inkey', path.join(pwd, 'PublicKey.bin'),
+                          '-out', path.join(pwd, 'EncryptedKeyMaterial.bin')])
+          log.info('Importing key material envelope to KMS')
+          with open('ImportToken.bin', 'rb') as t:
+            with open('EncryptedKeyMaterial.bin', 'rb') as f:
+              kms.import_key_material(
+                KeyId=key_id,
+                ImportToken=t.read(),
+                EncryptedKeyMaterial=f.read(),
+                ExpirationModel='KEY_MATERIAL_DOES_NOT_EXPIRE'
+              )
+
         if 'alias/' in config['s3']['kms_key_id']:
           alias = ''.join(config['s3']['kms_key_id'].split('/')[-1:])
           log.info('Creating alias/%s' % alias)
