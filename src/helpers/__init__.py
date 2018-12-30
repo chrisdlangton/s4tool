@@ -1,5 +1,5 @@
 import os, sys, logging, boto3, socket, configparser, colorlog
-from configparser import NoOptionError
+from configparser import NoOptionError, NoSectionError
 from os import path, getcwd, environ
 from yaml import load, dump
 from jinja2 import Environment, FileSystemLoader
@@ -101,7 +101,7 @@ def setup_logging(log_level):
     log.setLevel(logging.DEBUG)
 
 
-def assume_role(role, temp_profile, credentials_file, region=None, profile=None, force=False):
+def assume_role(role, temp_profile, credentials_file, region=None, profile=None, force=False, duration=None):
   global session
   log = logging.getLogger()
 
@@ -118,7 +118,9 @@ def assume_role(role, temp_profile, credentials_file, region=None, profile=None,
   aws_role_arn = get_aws_profile_option(credentials_file, temp_profile, 'aws_role_arn')
 
   expired = True
-  if expiration and aws_role_arn and aws_role_arn == role_arn:
+  if not expiration and not aws_role_arn:
+    should_assume = True
+  elif aws_role_arn == role_arn:
     td = aws_datetime(expiration) - datetime.utcnow()
     if aws_datetime(expiration) < datetime.utcnow():
       log.info('aws profile has expired at %s' % expiration)
@@ -129,24 +131,30 @@ def assume_role(role, temp_profile, credentials_file, region=None, profile=None,
       log.info('aws profile will expire in %d hrs %d mins %d secs' % (hours, minutes, seconds))
       expired = False
 
-    if td.seconds < 10:
+    if td.seconds < 90:
       should_assume = True
 
   if should_assume:
     assume_session = boto3.Session(profile_name=profile, region_name=region)
     sts_client = assume_session.client('sts')
-
-    assumedRoleObject = sts_client.assume_role(
-      RoleArn=role_arn,
-      RoleSessionName=role_session_name
-    )
-    credentials = assumedRoleObject['Credentials']
-    
+    params = {
+      'RoleArn': role_arn,
+      'RoleSessionName': role_session_name
+    }
+    if duration and duration <= 43200 and duration >= 900:
+      params['DurationSeconds'] = duration
     log.info('Assuming role %s' % role_arn)
+    assumedRoleObject = sts_client.assume_role(**params)
+    credentials = assumedRoleObject['Credentials']    
     session = boto3.Session(aws_access_key_id=credentials['AccessKeyId'],
                         aws_secret_access_key=credentials['SecretAccessKey'],
                         aws_session_token=credentials['SessionToken'],
                         region_name=region)
+
+    td = aws_datetime(str(credentials['Expiration'])) - datetime.utcnow()
+    hours, remainder = divmod(td.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    log.info('aws profile will expire in %d hrs %d mins %d secs' % (hours, minutes, seconds))
     update_config(credentials_file, temp_profile,
                   region=region,
                   role_arn=role_arn,
@@ -170,6 +178,8 @@ def get_aws_profile_option(credentials_file, profile, option):
     with open(credentials_file, 'r') as f:
       config.readfp(f)
       value = config.get(profile, option)
+  except NoSectionError:
+    value = None
   except NoOptionError:
     value = None
 
@@ -232,6 +242,7 @@ def get_session(temp_profile, credentials_file):
 
   start_boto_session(temp_profile=temp_profile, credentials_file=credentials_file, profile=aws_profile, access_key_id=access_key_id, secret_access_key=secret_access_key, region=aws_region)
   if 'assume_role' in config['aws']:
-    assume_role(config['aws']['assume_role'], temp_profile=temp_profile, credentials_file=credentials_file, region=aws_region, profile=aws_profile)
+    duration = config['aws'].get('assume_role_duration')
+    assume_role(config['aws']['assume_role'], temp_profile=temp_profile, credentials_file=credentials_file, region=aws_region, profile=aws_profile, duration=duration)
 
   return session

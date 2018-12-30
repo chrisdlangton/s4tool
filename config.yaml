@@ -4,7 +4,9 @@ safe_mode: True
 
 aws:
   assume_role: full-admin
+  assume_role_duration: 43200
   region: ap-southeast-2
+  profile: chris
 
 s3:
   bucket: chrisdlangton-backup
