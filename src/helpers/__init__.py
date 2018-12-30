@@ -1,12 +1,25 @@
-import sys, logging, boto3, socket, configparser
+import os, sys, logging, boto3, socket, configparser, colorlog
+from configparser import NoOptionError
 from os import path, getcwd, environ
 from yaml import load, dump
 from jinja2 import Environment, FileSystemLoader
+from datetime import datetime, timedelta
 
 
-log = logging.getLogger('s4tool')
 session = None
 config = None
+
+
+def aws_datetime(datetime_str):
+    dt = datetime.strptime(datetime_str[:19], '%Y-%m-%d %X')
+    d = timedelta(hours=int(datetime_str[20:22]),minutes=int(datetime_str[23:25]))
+    if datetime_str[19] == '+':
+        dt += d
+    elif datetime_str[19] == '-':
+        dt -= d
+    
+    return dt
+
 
 def make_arn(service, resource, partition='aws', use_account_id=True, account_id=None, region=None):
   if use_account_id and not account_id:
@@ -23,6 +36,7 @@ def make_arn(service, resource, partition='aws', use_account_id=True, account_id
 
 def start_boto_session(credentials_file=None, temp_profile=None, access_key_id=None, secret_access_key=None, profile=None, region=None):
   global session
+  log = logging.getLogger()
   if (access_key_id and not secret_access_key) or \
      (secret_access_key and not access_key_id):
     log.critical('Set both secret_access_key and access_key_id together')
@@ -36,6 +50,8 @@ def start_boto_session(credentials_file=None, temp_profile=None, access_key_id=N
       if not credentials_file or not temp_profile:
         log.critical('when not using a profile ensure credentials_file and temp_profile are defined')
         sys.exit(1)
+
+    if access_key_id and secret_access_key:
       update_config(credentials_file,
                     profile=temp_profile,
                     region=region,
@@ -54,10 +70,40 @@ def get_aws_account_id(return_identity=False):
   return identity['Account']
 
 
-def assume_role(role, temp_profile, credentials_file, region=None, profile=None):
+def setup_logging(log_level):
+  log = logging.getLogger()
+  format_str = '%(asctime)s - %(levelname)-8s - %(message)s'
+  date_format = '%Y-%m-%d %H:%M:%S'
+  if os.isatty(2):
+    cformat = '%(log_color)s' + format_str
+    colors = {'DEBUG': 'reset',
+              'INFO': 'bold_blue',
+              'WARNING': 'bold_yellow',
+              'ERROR': 'bold_red',
+              'CRITICAL': 'bold_red'}
+    formatter = colorlog.ColoredFormatter(cformat, date_format, log_colors=colors)
+  else:
+    formatter = logging.Formatter(format_str, date_format)
+
+  if log_level > 0:
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    log.addHandler(stream_handler)
+  if log_level == 1:
+    log.setLevel(logging.CRITICAL)
+  if log_level == 2:
+    log.setLevel(logging.ERROR)
+  if log_level == 3:
+    log.setLevel(logging.WARN)
+  if log_level == 4:
+    log.setLevel(logging.INFO)
+  if log_level >= 5:
+    log.setLevel(logging.DEBUG)
+
+
+def assume_role(role, temp_profile, credentials_file, region=None, profile=None, force=False):
   global session
-  assume_session = boto3.Session(profile_name=profile, region_name=region)
-  sts_client = assume_session.client('sts')
+  log = logging.getLogger()
 
   if role.startswith('arn:iam'):
     role_session_name = role.split('/')[:-1]
@@ -66,28 +112,72 @@ def assume_role(role, temp_profile, credentials_file, region=None, profile=None)
     role_session_name = role
     role_arn = make_arn('iam', path.join('role', role))
 
-  assumedRoleObject = sts_client.assume_role(
-    RoleArn=role_arn,
-    RoleSessionName=role_session_name
-  )
-  credentials = assumedRoleObject['Credentials']
+  should_assume = force
+
+  expiration = get_aws_profile_option(credentials_file, temp_profile, 'expiration')
+  aws_role_arn = get_aws_profile_option(credentials_file, temp_profile, 'aws_role_arn')
+
+  expired = True
+  if expiration and aws_role_arn and aws_role_arn == role_arn:
+    td = aws_datetime(expiration) - datetime.utcnow()
+    if aws_datetime(expiration) < datetime.utcnow():
+      log.info('aws profile has expired at %s' % expiration)
+      should_assume = True
+    else:
+      hours, remainder = divmod(td.seconds, 3600)
+      minutes, seconds = divmod(remainder, 60)
+      log.info('aws profile will expire in %d hrs %d mins %d secs' % (hours, minutes, seconds))
+      expired = False
+
+    if td.seconds < 10:
+      should_assume = True
+
+  if should_assume:
+    assume_session = boto3.Session(profile_name=profile, region_name=region)
+    sts_client = assume_session.client('sts')
+
+    assumedRoleObject = sts_client.assume_role(
+      RoleArn=role_arn,
+      RoleSessionName=role_session_name
+    )
+    credentials = assumedRoleObject['Credentials']
+    
+    log.info('Assuming role %s' % role_arn)
+    session = boto3.Session(aws_access_key_id=credentials['AccessKeyId'],
+                        aws_secret_access_key=credentials['SecretAccessKey'],
+                        aws_session_token=credentials['SessionToken'],
+                        region_name=region)
+    update_config(credentials_file, temp_profile,
+                  region=region,
+                  role_arn=role_arn,
+                  access_key_id=credentials['AccessKeyId'],
+                  secret_access_key=credentials['SecretAccessKey'],
+                  session_token=credentials['SessionToken'],
+                  expiration=credentials['Expiration'])
+  elif not expired:
+    session = boto3.Session(aws_access_key_id=get_aws_profile_option(credentials_file, temp_profile, 'aws_access_key_id'),
+                        aws_secret_access_key=get_aws_profile_option(credentials_file, temp_profile, 'aws_secret_access_key'),
+                        aws_session_token=get_aws_profile_option(credentials_file, temp_profile, 'aws_session_token'),
+                        region_name=region)
+
+
+def get_aws_profile_option(credentials_file, profile, option):
+  log = logging.getLogger()
+  log.info('Reading aws credentials file option [%s] with profile [%s]' % (option, profile))
+  config = configparser.RawConfigParser()
   
-  log.info('Assuming role %s' % role_arn)
-  session = boto3.Session(aws_access_key_id=credentials['AccessKeyId'],
-                       aws_secret_access_key=credentials['SecretAccessKey'],
-                       aws_session_token=credentials['SessionToken'],
-                       region_name=region)
-  update_config(credentials_file,
-                profile=temp_profile,
-                region=region,
-                role_arn=role_arn,
-                access_key_id=credentials['AccessKeyId'],
-                secret_access_key=credentials['SecretAccessKey'],
-                session_token=credentials['SessionToken'],
-                expiration=credentials['Expiration'])
+  try:
+    with open(credentials_file, 'r') as f:
+      config.readfp(f)
+      value = config.get(profile, option)
+  except NoOptionError:
+    value = None
+
+  return value
 
 
 def update_config(credentials_file, profile, access_key_id=None, secret_access_key=None, session_token=None, role_arn=None, region=None, expiration=None):
+  log = logging.getLogger()
   log.info('Updating aws credentials file with profile [%s]' % profile)
   config = configparser.RawConfigParser()
   with open(credentials_file, 'r') as f:
@@ -112,6 +202,7 @@ def update_config(credentials_file, profile, access_key_id=None, secret_access_k
 
 def get_config(config_file=None):
   global config
+  log = logging.getLogger()
   if not config_file:
     config_file = 'config.yaml'
   config_path = path.realpath(getcwd())

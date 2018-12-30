@@ -1,5 +1,5 @@
 import sys, os, colorlog, logging, argparse, json
-from helpers import make_arn, get_session, get_config, start_boto_session, get_aws_account_id
+from helpers import make_arn, get_session, get_config, start_boto_session, get_aws_account_id, setup_logging
 from os import path
 from subprocess import check_output
 from os.path import expanduser
@@ -34,13 +34,13 @@ def main(credentials_file, temp_profile, log_level=2, config_file=None):
     found_alias = False
     if 'key/' in kms_key_arn:
       for k in kms.list_keys()['Keys']:
-        log.info('comparing %s' % k['KeyArn'])
+        log.debug('comparing %s' % k['KeyArn'])
         if kms_key_arn == k['KeyArn']:
           found_key = True
           log.info('found %s' % kms_key_arn)
     elif 'alias/' in kms_key_arn:
       for k in kms.list_aliases()['Aliases']:
-        log.info('comparing %s' % k['AliasArn'])
+        log.debug('comparing %s' % k['AliasArn'])
         if kms_key_arn == k['AliasArn']:
           found_alias = True
           log.info('found %s' % kms_key_arn)
@@ -54,9 +54,9 @@ def main(credentials_file, temp_profile, log_level=2, config_file=None):
         sys.exit(1)
       else:
         log.warn('kms_key_id [%s] could not be found, creating resources' % kms_key_arn)
-        if config.get('key_policy'):
+        if 'setup' in config and config['setup'].get('key_policy'):
           key = kms.create_key(
-            Policy=json.dumps(config['key_policy']),
+            Policy=json.dumps(config['setup']['key_policy']),
             Description="s4tool",
             KeyUsage='ENCRYPT_DECRYPT')
         else:
@@ -104,39 +104,9 @@ def main(credentials_file, temp_profile, log_level=2, config_file=None):
       s3.put_bucket_encryption(Bucket=config['s3']['bucket'],
           ServerSideEncryptionConfiguration={'Rules': [{'ApplyServerSideEncryptionByDefault': {'SSEAlgorithm': 'AES256'}}]})
 
-    if config.get('bucket_policy'):
+    if 'setup' in config and config['setup'].get('bucket_policy'):
       log.info('Applying bucket policy')
-      s3.put_bucket_policy(Bucket=config['s3']['bucket'], Policy=json.dumps(config['bucket_policy']))
-
-def setup_logging(log_level):
-  log = logging.getLogger()
-  format_str = '%(asctime)s - %(levelname)-8s - %(message)s'
-  date_format = '%Y-%m-%d %H:%M:%S'
-  if os.isatty(2):
-    cformat = '%(log_color)s' + format_str
-    colors = {'DEBUG': 'reset',
-              'INFO': 'bold_blue',
-              'WARNING': 'bold_yellow',
-              'ERROR': 'bold_red',
-              'CRITICAL': 'bold_red'}
-    formatter = colorlog.ColoredFormatter(cformat, date_format, log_colors=colors)
-  else:
-    formatter = logging.Formatter(format_str, date_format)
-
-  if log_level > 0:
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    log.addHandler(stream_handler)
-  if log_level == 1:
-    log.setLevel(logging.CRITICAL)
-  if log_level == 2:
-    log.setLevel(logging.ERROR)
-  if log_level == 3:
-    log.setLevel(logging.WARN)
-  if log_level == 4:
-    log.setLevel(logging.INFO)
-  if log_level >= 5:
-    log.setLevel(logging.DEBUG)
+      s3.put_bucket_policy(Bucket=config['s3']['bucket'], Policy=json.dumps(config['setup']['bucket_policy']))
 
 
 if __name__ == '__main__':
