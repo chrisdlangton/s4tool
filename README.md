@@ -45,6 +45,29 @@ Type `s4tool -h` to see the available cli arguments;
 - use `-p` or `--temp_profile` TEMP_PROFILE
   s4tool will save credentials to leverage the awscli
 
+## Additional cli options for sync
+
+Use a dict instead of string for `files` values;
+
+```yaml
+files:
+  - '{{ HOME }}/Documents'
+  - path: '{{ HOME }}/Pictures'
+    extra_options: '--no-progress'
+```
+
+you can also use a list for `extra_options`
+
+```yaml
+files:
+  - '{{ HOME }}/Documents'
+  - path: '{{ HOME }}/Pictures'
+    extra_options:
+      - '--no-progress'
+      - '--acl'
+      - 'bucket-owner-full-control'
+```
+
 ## Configuration
 
 Changing yaml values in `~/.s4tool` (or a file when passing the `--config_file` argument) provides several features;

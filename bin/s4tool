@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys, os, colorlog, logging, argparse, json, rsa, boto3, socket, configparser
+import sys, os, colorlog, logging, argparse, json, rsa, boto3, socket, configparser, string
 from os import path, getcwd, environ
 from subprocess import check_output
 from os.path import expanduser
@@ -242,6 +242,15 @@ def get_config(config_file=None):
   return config
 
 
+def str_replace(substr, text):
+    index = 0
+    length = len(substr)
+    while string.find(text, substr) != -1:
+        index = string.find(text, substr)
+        text = text[0:index] + text[index+length:]
+    return text
+ 
+
 def get_session(temp_profile, credentials_file):
   global session
   
@@ -264,6 +273,7 @@ def main(credentials_file, temp_profile, log_level=2, config_file=None):
   setup_logging(log_level)
   log = logging.getLogger()
   pwd = path.realpath(getcwd())
+  user_home = environ.get('HOME')
 
   config = get_config(config_file)
   aws_region = config['aws'].get('region')
@@ -416,6 +426,48 @@ def main(credentials_file, temp_profile, log_level=2, config_file=None):
     if 'setup' in config and config['setup'].get('bucket_policy'):
       log.info('Applying bucket policy')
       s3.put_bucket_policy(Bucket=config['s3']['bucket'], Policy=json.dumps(config['setup']['bucket_policy']))
+
+  for sync in config['files']:
+    args = ['aws', '--profile', profile, 's3', 'sync']
+    if 'sse' in config['s3']:
+      if config['s3']['sse'] == 'AES256':
+        args.append('--sse')
+      elif config['s3']['sse'] == 'aws:kms':
+        args.append('--sse')
+        args.append('aws:kms')
+        if 'kms_key_id' in config['s3']:
+          args.append('--sse-kms-key-id')
+          args.append(config['s3']['kms_key_id'])
+      else:
+        log.error('sse could not be computed, check the docs')
+    if 'extra_options' in sync:
+      if type(sync['extra_options']) == list:
+        p = sync['extra_options']
+      elif type(sync['extra_options']) == str:
+        p = sync['extra_options'].split(' ')
+      else:
+        log.error('extra_options could not be computed, check the docs')
+      for s in p:
+        args.append(s)
+
+    if type(sync) == str:
+      source = sync
+    elif 'path' in sync:
+      source = sync['path']
+    else:
+      log.error('source path could not be computed, check the docs')
+      continue
+    if not path.isdir(source):
+      log.error('source path [%s] does not exist' % source)
+      continue
+
+    args.append(source)
+    dest = str_replace(pwd, config['s3']['base_path'])
+    dest = str_replace(user_home, dest)
+    dest = path.join('s3://', config['s3']['bucket'], dest)
+    args.append(dest)
+    log.info(' '.join(args))
+    check_output(args)
 
 
 if __name__ == '__main__':
