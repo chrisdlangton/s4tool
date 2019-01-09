@@ -29,9 +29,17 @@ AWS S3 Syncronisation (S4) Tool
 
 ## Install
 
-1. `git clone git@github.com:chrisdlangton/s4tool.git; cd s4tool`
+1. Clone this repo
 
-2. `cp bin/s4tool /usr/local/bin/`
+```bash
+git clone git@github.com:chrisdlangton/s4tool.git; cd s4tool
+```
+
+2. Copy the executable to a binary directory in your PATH
+
+```bash
+cp bin/s4tool /usr/local/bin/
+```
 
 3. create a config in `~/.s4tool` with the following basic values;
 
@@ -48,7 +56,11 @@ files:
   - '{{ HOME }}/Pictures'
 ```
 
-or copy the sample one `cp sample.yaml ~/.s4tool` and change the key, secret, bucket, and files values
+or copy the sample one (`sample.yaml`) and change the key, secret, bucket, and files values
+
+```bash
+cp sample.yaml ~/.s4tool
+```
 
 NOTE: when running in EC2 use an instance role, do not define key and secret here.
 
@@ -58,7 +70,7 @@ Simply type in the terminal `s4tool`
 
 ### Debug
 
-Standard python logging is used, to get more levels of verbosity just use `s4tool -v` or `s4tool -vv`, keep adding v's up[ to 5 times.]
+Standard python logging is used, to get more levels of verbosity just use `s4tool -v` or `s4tool -vvvv`, keep adding v's up (up to 5 times).
 
 ### Options
 
@@ -213,7 +225,11 @@ setup:
   key_material: awscmk.key
 ```
 
-Assuming you have a key material with that name. You can test this using `dd if=/dev/urandom bs=32 count=1 of=awscmk.key` on Linux to create a key material.
+Assuming you have a key material with that name. You can test this on Linux to create a key material. Using;
+
+```bash
+dd if=/dev/urandom bs=32 count=1 of=awscmk.key
+```
 
 NOTE: In production it is recommended you use a CA or HSM to generate the key material for KMS CMK.
 
