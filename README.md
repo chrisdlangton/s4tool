@@ -1,6 +1,16 @@
 # s4tool
 AWS S3 Syncronisation (S4) Tool
 
+# Contents
+
+1. [Install](#install)
+
+2. [Usage](#usage)
+    - [Debug](#debug)
+    - [Options](#options)
+
+3. [Third Example](#third-example)
+
 ## Install
 
 1. `git clone git@github.com:chrisdlangton/s4tool.git; cd s4tool`
