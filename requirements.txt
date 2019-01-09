@@ -1,6 +1,6 @@
 boto3==1.9.71
 botocore==1.12.71
-PyYAML==3.13
+PyYAML==4.2b4
 MarkupSafe==1.1.0
 jinja2==2.10
 colorlog==4.0.2
