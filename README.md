@@ -68,6 +68,8 @@ files:
       - 'bucket-owner-full-control'
 ```
 
+See: https://docs.aws.amazon.com/cli/latest/reference/s3/sync.html
+
 ## Configuration
 
 Changing yaml values in `~/.s4tool` (or a file when passing the `--config_file` argument) provides several features;
