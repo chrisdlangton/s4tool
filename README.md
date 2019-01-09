@@ -9,7 +9,23 @@ AWS S3 Syncronisation (S4) Tool
     - [Debug](#debug)
     - [Options](#options)
 
-3. [Third Example](#third-example)
+3. [Extra s3 sync args](#extra-s3-sync-args)
+
+4. [Configuration](#configuration)
+    - [Encryption](#encryption)
+    - [Set the aws profile](#set-the-aws-profile)
+    - [Assume Role](#assume-role)
+    - [Set the default region](#set-the-default-region)
+
+5. [safe mode](#safe-mode)
+
+    - [Creating a bucket with a bucket policy](#creating-a-bucket-with-a-bucket-policy)
+
+    - [Creating a KMS key with rotation](#create-a-kms-key-with-rotation)
+
+    - [Creating a KMS CMK](#creating-a-kms-cmk)
+
+    - [Creating a KMS key with a policy](#creating-a-kms-key-with-a-policy)
 
 ## Install
 
@@ -55,7 +71,7 @@ Type `s4tool -h` to see the available cli arguments;
 - use `-p` or `--temp_profile` TEMP_PROFILE
   s4tool will save credentials to leverage the awscli
 
-## Additional cli options for sync
+## Extra s3 sync args
 
 Use a dict instead of string for `files` values;
 
@@ -143,7 +159,9 @@ By default this is `safe_mode: False`. You can let s4tool create AWS Resources f
 
 For the basic bucket and/or KMS key creation just use the above configuration values.
 
-## Creating a bucket with a bucket policy
+### Creating a bucket with a bucket policy
+
+**Requires `safe_mode: True`**
 
 The following is an example bucket policy configuration
 
@@ -172,7 +190,9 @@ setup:
             aws:SecureTransport: 'false'
 ```
 
-## Creating a KMS key with rotation
+### Creating a KMS key with rotation
+
+**Requires `safe_mode: True`**
 
 You can enable the AWS managed KMS key rotation when the KMS key material origin is AWS_KMS (default)
 
@@ -181,7 +201,9 @@ setup:
   enable_key_rotation: True
 ```
 
-## Creating a KMS CMK
+### Creating a KMS CMK
+
+**Requires `safe_mode: True`**
 
 You can create a CMK with the following
 
@@ -195,7 +217,9 @@ Assuming you have a key material with that name. You can test this using `dd if=
 
 NOTE: In production it is recommended you use a CA or HSM to generate the key material for KMS CMK.
 
-## Creating a KMS key with a policy
+### Creating a KMS key with a policy
+
+**Requires `safe_mode: True`**
 
 The following is an example key policy configuration
 
