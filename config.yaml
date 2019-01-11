@@ -1,6 +1,6 @@
 ---
 # Prevents the creation of any AWS resources such as S3 buckets and KMS keys
-safe_mode: False
+safe_mode: True
 
 aws:
   assume_role: full-admin
@@ -14,11 +14,21 @@ s3:
   sse: 'aws:kms'
   kms_key_id: alias/s4tool-cli
 
+files:
+  - path: '{{ HOME }}/Documents'
+    extra_options:
+      - '--no-progress'
+      - '--acl'
+      - 'bucket-owner-full-control'
+  - path: '{{ HOME }}/Pictures'
+    extra_options:
+      - '--no-progress'
+      - '--acl'
+      - 'bucket-owner-full-control'
 # Special settings used when safe_mode False at setup time
 setup:
   enable_key_rotation: True
   key_origin: AWS_KMS
-  key_material: awscmk.key #dd if=/dev/urandom bs=32 count=1 of=awscmk.key
 
   bucket_policy:
     Version: '2012-10-17'
