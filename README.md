@@ -56,10 +56,10 @@ files:
   - '{{ HOME }}/Pictures'
 ```
 
-or copy the sample one (`sample.yaml`) and change the key, secret, bucket, and files values
+or copy the sample one (`sample-config.yaml`) and change the key, secret, bucket, and files values
 
 ```bash
-cp sample.yaml ~/.s4tool
+cp sample-config.yaml ~/.s4tool
 ```
 
 NOTE: when running in EC2 use an instance role, do not define key and secret here.
@@ -167,13 +167,13 @@ aws:
 
 ## safe mode
 
-By default this is `safe_mode: False`. You can let s4tool create AWS Resources for you if you have set `safe_mode: True`.
+By default this is `safe_mode: True`. You can let s4tool create AWS Resources for you if you have set `safe_mode: False`.
 
 For the basic bucket and/or KMS key creation just use the above configuration values.
 
 ### Creating a bucket with a bucket policy
 
-**Requires `safe_mode: True`**
+**Requires `safe_mode: False`**
 
 The following is an example bucket policy configuration
 
@@ -204,7 +204,7 @@ setup:
 
 ### Creating a KMS key with rotation
 
-**Requires `safe_mode: True`**
+**Requires `safe_mode: False`**
 
 You can enable the AWS managed KMS key rotation when the KMS key material origin is AWS_KMS (default)
 
@@ -235,7 +235,7 @@ NOTE: In production it is recommended you use a CA or HSM to generate the key ma
 
 ### Creating a KMS key with a policy
 
-**Requires `safe_mode: True`**
+**Requires `safe_mode: False`**
 
 The following is an example key policy configuration
 
