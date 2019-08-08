@@ -215,7 +215,7 @@ setup:
 
 ### Creating a KMS CMK
 
-**Requires `safe_mode: True`**
+**Requires `safe_mode: False`**
 
 You can create a CMK with the following
 
